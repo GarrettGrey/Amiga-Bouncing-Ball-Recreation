@@ -13,7 +13,7 @@ This process wil only work on Debian/Ubuntu based Linux distrobutions.
     sudo apt install freeglut3-dev binutils g++ mesa-common-dev build-essential libglew-dev libglm-dev mesa-utils
 3. Compile the script
 
-    g++ bounce2.cpp -lGL -lGLU - glut
+    g++ bounce2.cpp -lGL -lGLU -lglut
 4. Run the program
 
     ./a.out
