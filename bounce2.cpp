@@ -13,17 +13,37 @@
 	4/21/21 took some slight liberties and adjusted the shadow of the ball to be cast at an angle. The original doesn't do this, but it looks nicer this way.
 	4/23/21	adjusted the angle and size of the ball's shadow.
 	4/26/21 adjusted the grid's bottom diagonals.
+    10/10/23 replaced the polygon/shadow functions with the new one from poly_new.cpp
+	10/13/23 removed fullscreen
+			 changed the program window to create a 4x3 window based on the height of the host monitor
+	10/16/23 readjusted the shadow's position to reflect the original.
+    3/13/24 capped the framerate to approximately 60 fps (way easier than I expected, even though it involed me using a namespace other than std for the first time)
+    		adjusted speed of the ball to compinsate for the framerate limit
+            slightly ajusted horizontal bounds for when the ball changes direction
+            rotated the ball so that its vertical and horizontal sides are flat instead of a point like in the original
+    
+    TODO:
+    Add the grid texture to the ball
+    Add sound
 */ 
 
 #include <GL/freeglut.h> 
 #include <iostream>
 #include <cmath>
+#include <chrono>
+#include <unistd.h> //will not work in Windows.
+#include <thread>
+  
 using namespace std;
 
 const float pi = 3.14159265;
+double goalFrameTime = 1000/60; //how long a frame should last in ms (denominator is fps)
+
+int height;
+int width;
 
 float m[2]; //m[0] is horizontal offset, m[1] is vertical offset
-float v[2] = {.0075, 0}; //v[0] is horizontal velocity, v[1] is vertical velocity
+float v[2] = {.025, 0}; //v[0] is horizontal velocity, v[1] is vertical velocity
 
 void setWindow (float left, float right, float bottom, float top){
 	glMatrixMode(GL_PROJECTION);
@@ -72,130 +92,69 @@ void grid(){
 
 void bounce(){
     if(m[1] <= -8){
-        v[1] = .057;
-    }else v[1] -= .0001;
+        v[1] = .15;
+    }else v[1] -= .001;
     m[1] += v[1];
 
-	if(m[0] <= -12 || m[0] >= 12){
+	if(m[0] <= -12.5 || m[0] >= 12.5){
 		v[0] *= -1;
 	}
 	m[0] += v[0];
 }
 
-void poly(float n){
-	glColor4f (1.0, 0.0, 0.0, 5.0);  // red
-	float pnt[2];
+void poly(int r, float pnts, double rot){ //r=radius, pnts=points, rot=rotation
+	glColor3f (1.0, 0.0, 0.0);  // red
 	glBegin (GL_POLYGON);
-        //Draws counter-clockwise from the left point on the bottom horizontal edge.
-		pnt[0] = n*tan(pi/16) + m[0];
-		pnt[1] = -n + m[1];
-		glVertex2f (pnt[0],pnt[1]);
-
-        for(int i = 0; i < 3; i++){ // denominator in the sine increases by 4x^2 + 8, were x is i.
-            pnt[0] += (2*n*tan(pi/16)*sin(3*pi/(4*(i*i)+8)));
-            pnt[1] += (2*n*tan(pi/16)*cos(3*pi/(4*(i*i)+8)));
-            glVertex2f (pnt[0],pnt[1]);
-        }
-		pnt[0] = n + m[0];
-		pnt[1] = n*tan(pi/16) + m[1] + 1.125;
-		glVertex2f (pnt[0],pnt[1]);
-
-        for(int i = 2; i >= 0; i--){
-            pnt[0] -= (2*n*tan(pi/16)*sin(3*pi/(4*(i*i)+8)));
-            pnt[1] += (2*n*tan(pi/16)*cos(3*pi/(4*(i*i)+8)));
-            glVertex2f (pnt[0],pnt[1]);
-        }
-		pnt[0] = n*-tan(pi/16) + m[0];
-		pnt[1] = n + m[1] + 1.125;
-		glVertex2f (pnt[0],pnt[1]);
-
-
-        for(int i = 0; i < 3; i++){
-            pnt[0] -= (2*n*tan(pi/16)*sin(3*pi/(4*(i*i)+8)));
-            pnt[1] -= (2*n*tan(pi/16)*cos(3*pi/(4*(i*i)+8)));
-            glVertex2f (pnt[0],pnt[1]);
-        }
-		pnt[0] = -n + m[0];
-		pnt[1] = n*-tan(pi/16) + m[1];
-		glVertex2f (pnt[0],pnt[1]);
-
-		for(int i = 2; i >= 0; i--){
-            pnt[0] += (2*n*tan(pi/16)*sin(3*pi/(4*(i*i)+8)));
-            pnt[1] -= (2*n*tan(pi/16)*cos(3*pi/(4*(i*i)+8)));
-            glVertex2f (pnt[0],pnt[1]);
+		for(int i = 0; i < pnts; i++){
+        	glVertex2f (m[0]+(r*sin(((i*pi)/(pnts/2))+rot)),m[1]+(r*sin(((((pnts/4)-i)*pi)/(pnts/2))-rot)));
         }
 	glEnd();
 }
 
-void shadow(float n){
-	glColor4f(.25,.25,.25,0.5);  // dark gray
-	float pnt[2];
+void shadow(float r, float pnts, double rot){ //r=radius, pnts=points, rot=rotation
+	glColor4f(.25,.25,.25,0.5);  // half-transparent dark gray
 	glBegin (GL_POLYGON);
-        //Draws counter-clockwise from the left point on the bottom horizontal edge.
-		pnt[0] = n*tan(pi/16) + m[0] + 2;
-		pnt[1] = -n + m[1] + 1;
-		glVertex2f (pnt[0],pnt[1]);
-
-        for(int i = 0; i < 3; i++){ // denominator in the sine increases by 4x^2 + 8, were x is i.
-            pnt[0] += (2*n*tan(pi/16)*sin(3*pi/(4*(i*i)+8)));
-            pnt[1] += (2*n*tan(pi/16)*cos(3*pi/(4*(i*i)+8)));
-            glVertex2f (pnt[0],pnt[1]);
-        }
-		pnt[0] = n + m[0] + 2;
-		pnt[1] = n*tan(pi/16) + m[1] + 1.125;
-		glVertex2f (pnt[0],pnt[1]);
-
-        for(int i = 2; i >= 0; i--){
-            pnt[0] -= (2*n*tan(pi/16)*sin(3*pi/(4*(i*i)+8)));
-            pnt[1] += (2*n*tan(pi/16)*cos(3*pi/(4*(i*i)+8)));
-            glVertex2f (pnt[0],pnt[1]);
-        }
-		pnt[0] = n*-tan(pi/16) + m[0] + 2;
-		pnt[1] = n + m[1] + 1.125;
-		glVertex2f (pnt[0],pnt[1]);
-
-
-        for(int i = 0; i < 3; i++){
-            pnt[0] -= (2*n*tan(pi/16)*sin(3*pi/(4*(i*i)+8)));
-            pnt[1] -= (2*n*tan(pi/16)*cos(3*pi/(4*(i*i)+8)));
-            glVertex2f (pnt[0],pnt[1]);
-        }
-		pnt[0] = -n + m[0] + 2;
-		pnt[1] = n*-tan(pi/16) + m[1] + 1;
-		glVertex2f (pnt[0],pnt[1]);
-
-		for(int i = 2; i >= 0; i--){
-            pnt[0] += (2*n*tan(pi/16)*sin(3*pi/(4*(i*i)+8)));
-            pnt[1] -= (2*n*tan(pi/16)*cos(3*pi/(4*(i*i)+8)));
-            glVertex2f (pnt[0],pnt[1]);
+		for(int i = 0; i < pnts; i++){
+        	glVertex2f (m[0]+(r*sin(((i*pi)/(pnts/2))+rot))+2,m[1]+(r*sin(((((pnts/4)-i)*pi)/(pnts/2))-rot))+1); 
         }
 	glEnd();
 }
 
 void Render (void){
+  	chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
 	glClear (GL_COLOR_BUFFER_BIT); // GL_COLOR_BUFFER_BIT=Indicates the buffers currently enabled for color writing
 	glClearColor (.65, .65, .65, 0.0); // glClearColor() set the background color of the buffer to gray
 	setWindow (-20.0, 20.0, -20.0, 20.0);
-	setViewport (0, 1366, 0, 768);
+	setViewport (0, width, 0, height);
 
     bounce();
 
 	grid();
-	shadow(6.5);
-    poly(6);
+	shadow(6.5,16,pi/16);
+    poly(6,16,pi/16);
 
 	glFlush(); // this fct flushes what we have in the buffer to the screen
 	glutSwapBuffers();
     glutPostRedisplay(); //This allows the render function to loop, allowing any changes to act as frames in an animation
+  	chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
+  	chrono::duration<double, std::milli> time_span = t2 - t1;//get time spent on this loop
+  	//if it is less than 1/60, call sleep until 1/60 seconds have passed
+  	if(time_span.count() < goalFrameTime){
+      	int timeLeft = (goalFrameTime - time_span.count());
+    	cout << "Time to render: " << time_span.count() << "ms, waiting " << timeLeft << "ms\n";
+      	this_thread::sleep_for(chrono::milliseconds(timeLeft));
+    }
 }
 
 int main(int argc,char** argv){
 	glutInitDisplayMode (GLUT_SINGLE | GLUT_RGB);
 	glutInitWindowPosition (100, 0);
-	glutInitWindowSize (1366, 768);
 	glutInit(&argc,argv);
+	height = glutGet(GLUT_SCREEN_HEIGHT);
+	width = height*4/3;
+	glutInitWindowSize (width, height);
+
 	glutCreateWindow ("Amiga Bouncing Ball Recreation");
-	//glutFullScreen();
 	glEnable (GL_BLEND); //enables transparency
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
